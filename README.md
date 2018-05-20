@@ -40,6 +40,7 @@ The rocket-rocc-examples repo is an environment for testing example RoCCs in roc
 
 ## Build the FFT test program
 
+	$ autoconf
 	$ cd $ROCKET_ROCC_EXAMPLES_DIR
 	$ mkdir build && cd build
 	$ ../configure --with-riscvtools=$ROCKETCHIP_DIR/riscv-tools
