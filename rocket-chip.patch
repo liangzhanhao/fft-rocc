@@ -1,0 +1,470 @@
+diff --git a/src/main/scala/coreplex/Configs.scala b/src/main/scala/coreplex/Configs.scala
+index 7384dd6..ab6d6fa 100644
+--- a/src/main/scala/coreplex/Configs.scala
++++ b/src/main/scala/coreplex/Configs.scala
+@@ -99,28 +99,6 @@ class With1TinyCore extends Config((site, here, up) => {
+   ))
+ })
+ 
+-
+-
+-////////////////////////FFTACC/////////////////////////////////
+-
+-
+-class WithFFTACC extends Config((site, here, up) => {
+-  case RocketTilesKey => up(RocketTilesKey, site) map { r =>
+-    r.copy(rocc =
+-      Seq(
+-        RoCCParams(
+-          opcodes = OpcodeSet.custom0,
+-          generator = (p: Parameters) => {
+-            val fftacc = LazyModule(new FFTACC()(p))
+-            fftacc})
+-      ))
+-    }
+-})
+-
+-///////////////////////FFTACC//////////////////////////////////
+-
+-
+-
+ class WithNBanksPerMemChannel(n: Int) extends Config((site, here, up) => {
+   case BankedL2Key => up(BankedL2Key, site).copy(nBanksPerChannel = n)
+ })
+diff --git a/src/main/scala/system/Configs.scala b/src/main/scala/system/Configs.scala
+index e360562..5aab4f1 100644
+--- a/src/main/scala/system/Configs.scala
++++ b/src/main/scala/system/Configs.scala
+@@ -31,17 +31,8 @@ class BaseConfig extends Config(new BaseCoreplexConfig().alter((site,here,up) =>
+   case ExtIn  => SlavePortParams(beatBytes = 8, idBits = 8, sourceBits = 4)
+ }))
+ 
+-
+ class DefaultConfig extends Config(new WithNBigCores(1) ++ new BaseConfig)
+ 
+-
+-
+-//FFTACCConfig
+-class FFTACCConfig extends Config(new WithFFTACC ++ new DefaultConfig)
+-//FFTACCConfig
+-
+-
+-
+ class DefaultBufferlessConfig extends Config(
+   new WithBufferlessBroadcastHub ++ new WithNBigCores(1) ++ new BaseConfig)
+ 
+diff --git a/src/main/scala/tile/FFTACC.scala b/src/main/scala/tile/FFTACC.scala
+deleted file mode 100644
+index 68cbd45..0000000
+--- a/src/main/scala/tile/FFTACC.scala
++++ /dev/null
+@@ -1,409 +0,0 @@
+-package freechips.rocketchip.tile
+-
+-import Chisel._
+-
+-import freechips.rocketchip.config._
+-import freechips.rocketchip.coreplex._
+-import freechips.rocketchip.diplomacy._
+-import freechips.rocketchip.rocket._
+-import freechips.rocketchip.tilelink._
+-import freechips.rocketchip.util.InOrderArbiter
+-
+-
+-
+-class  FFTACC(implicit p: Parameters) extends LazyRoCC {
+-  override lazy val module = new FFTACCModule(this)
+-}
+-class FFTACCModule(outer: FFTACC)(implicit p: Parameters) extends LazyRoCCModule(outer)
+-  with HasCoreParameters {
+-/*
+-  val io = IO(new Bundle
+-  {
+-    val Inst_funct = Input(UInt(7.W))
+-    val Inst_rs2 = Input(UInt(5.W))
+-    val Inst_rs1 = Input(UInt(5.W))
+-    val Inst_xd = Input(Bool())
+-    val Inst_xs1 = Input(Bool())
+-    val Inst_xs2 = Input(Bool())
+-    val Inst_rd = Input(UInt(5.W))
+-    val Inst_opcode = Input(UInt(7.W))
+-    val Inst_valid = Input(Bool())
+-    val Inst_ready = Output(Bool())
+-    val rs1 = Input(UInt(xLen.W))
+-    val rs2 = Input(UInt(xLen.W))
+-    val MemRespData = Input(UInt(xLen.W))
+-    val MemRespTag = Input(UInt(8.W))
+-    val MemRespValid = Input(Bool())
+-    val MemReqAddr = Output(UInt(40.W)) or 32.W
+-    val MemReqData = Output(UInt(xLen.W))
+-    val MemReqTag = Output(UInt(8.W))
+-    val MemReqTyp = Output(UInt(3.W))
+-    val MemReqCmd = Output(UInt(5.W))
+-    val MemReqValid = Output(Bool())
+-    val MemReqReady = Input(Bool())
+-    val Busy = Output(Bool())
+-    val Interrupt = Output(Bool())
+-  })
+-*/
+-
+-
+-  class ComplexNum extends Bundle 
+-  {
+-    val real = UInt(xLen.W)
+-    val imag = UInt(xLen.W)
+-  }
+-
+-  def Receive(number: UInt, pri: ComplexNum, tag: UInt, data: UInt): ComplexNum = 
+-  {
+-    val C = Wire(new ComplexNum)
+-    C.real := Mux(io.mem.resp.valid && tag === number, data, pri.real)
+-    C.imag := Mux(io.mem.resp.valid && tag === number + 8.U, data, pri.imag)
+-    C
+-  }
+-
+-  def ZeroComplex: ComplexNum =
+-  {
+-    val C = Wire(new ComplexNum)
+-    C.real := 0.U
+-    C.imag := 0.U
+-    C
+-  }
+-
+-  def ComplexAdd(A: ComplexNum, B: ComplexNum): ComplexNum =
+-  {
+-    val C = Wire(new ComplexNum)
+-    C.real := A.real + B.real
+-    C.imag := A.imag + B.imag
+-    C
+-  }
+-
+-  def MinusComplex(A: ComplexNum): ComplexNum =
+-  {
+-    val C = Wire(new ComplexNum)
+-    C.real := (~A.real) + 1.U
+-    C.imag := (~A.imag) + 1.U
+-    C
+-  }
+-
+-  def MulJ(A: ComplexNum): ComplexNum =
+-  {
+-    val C = Wire(new ComplexNum)
+-    C.real := (~A.imag) + 1.U
+-    C.imag := A.real
+-    C
+-  }
+-
+-  def HalfComplex(A: ComplexNum): ComplexNum =
+-  {
+-    val C = Wire(new ComplexNum)
+-    C.real := Cat(A.real(31), A.real(31,1))
+-    C.imag := Cat(A.imag(31), A.imag(31,1))
+-    C
+-  }
+-
+-  def MulOnePlusJ(A: ComplexNum): ComplexNum =
+-  {
+-    val C = Wire(new ComplexNum)
+-    C.real := A.real + (~A.imag) + 1.U
+-    C.imag := A.real + A.imag
+-    C
+-  }
+-
+-  def MulOneMinusJ(A: ComplexNum): ComplexNum =
+-  {
+-    val C = Wire(new ComplexNum)
+-    C.real := A.real + A.imag
+-    C.imag := A.imag + (~A.real) + 1.U
+-    C
+-  }
+-
+-  def DivSquaTwo(A: ComplexNum): ComplexNum =
+-  {
+-    val C = Wire(new ComplexNum)
+-    if(xLen == 32) {
+-      C.real := (Cat(Fill(32, A.real(31)), A.real) * "hB504F334".U(32.W))(63,32)
+-      C.imag := (Cat(Fill(32, A.imag(31)), A.imag) * "hB504F334".U(32.W))(63,32)
+-      C
+-    } else {
+-      C.real := (Cat(Fill(64, A.real(63)), A.real) * "hB504F333F9DE6800".U(64.W))(127,64)
+-      C.imag := (Cat(Fill(64, A.imag(63)), A.imag) * "hB504F333F9DE6800".U(64.W))(127,64)
+-      C
+-    }
+-  }
+-
+-
+-  val rece = Reg(Vec(8, new ComplexNum))
+-  val send = Reg(Vec(8, new ComplexNum))
+-
+-  val idle0 :: idle1 :: init :: s1 :: s2 :: s3 :: s4 :: s5 :: s6 :: s7 :: s8 :: s9 :: s10 :: re :: Nil = Enum(14)
+-
+-  val state = RegInit(idle0)
+-
+-  val InstReady = RegInit(false.B)
+-  val funct = RegInit(3.U(2.W))
+-  val FinishRece = RegInit(false.B)
+-  val FinishSend = RegInit(false.B)
+-  val RealPriAddr = RegInit(0.U(xLen.W))
+-  val ImagPriAddr = RegInit(0.U(xLen.W))
+-  val RealRetAddr = RegInit(0.U(xLen.W))
+-  val ImagRetAddr = RegInit(0.U(xLen.W))
+-  val con1 = io.cmd.bits.inst.funct(1,0) === 0.U && io.cmd.valid
+-  val con2 = (io.cmd.bits.inst.funct(1,0) === 1.U || io.cmd.bits.inst.funct(1,0) === 2.U) && io.cmd.valid
+-  val con3 = state === idle0 || state === idle1
+-  val memreqvalid = Wire(Bool())
+-  val zero :: lreq :: sreq :: fin :: Nil = Enum(4)
+-  val ReqState = RegInit(fin)
+-  val memreqcmd = RegInit(0.U(5.W))
+-  val ReqCounter = RegInit(0.U(4.W))
+-  val ReceTagNote = RegInit(Vec(Seq.fill(16)(false.B)))
+-  val xs2 = RegInit(false.B)
+-  val Max = Wire(UInt(4.W))
+-  val LAddr = Wire(UInt(xLen.W))
+-  val SAddr = Wire(UInt(xLen.W))
+-  val con4 = state === init && (xs2 && ReceTagNote.asUInt === "hFFFF".U || !xs2 && ReceTagNote.asUInt === "h00FF".U)
+-  val SBits: Int = if(xLen == 64) 3 else 2
+-
+-  io.interrupt := false.B
+-
+-
+-//datapath
+-  send(0) := MuxCase(send(0),
+-                     Array((state === idle0) -> ZeroComplex,
+-                           (state === s1) -> ComplexAdd(rece(0), rece(4)),
+-                           (state === s3) -> ComplexAdd(rece(0), rece(2)),
+-                           (state === s5) -> ComplexAdd(rece(0), rece(4)),
+-                           (state === s6) -> ComplexAdd(rece(0), rece(4)),
+-                           (state === s8) -> ComplexAdd(rece(0), rece(2)),
+-                           (state === s10) -> HalfComplex(ComplexAdd(rece(0), rece(1)))))
+-  send(1) := MuxCase(send(1),
+-                     Array((state === idle0) -> ZeroComplex,
+-                           (state === s1) -> ComplexAdd(rece(0), MinusComplex(rece(4))),
+-                           (state === s3) -> ComplexAdd(rece(1), rece(3)),
+-                           (state === s5) -> ComplexAdd(rece(1), rece(5)),
+-                           (state === s6) -> ComplexAdd(rece(1), rece(5)),
+-                           (state === s8) -> ComplexAdd(rece(1), rece(3)),
+-                           (state === s10) -> HalfComplex(ComplexAdd(rece(4), rece(5)))))
+-  send(2) := MuxCase(send(2),
+-                     Array((state === idle0) -> ZeroComplex,
+-                           (state === s1) -> ComplexAdd(rece(2), rece(6)),
+-                           (state === s3) -> ComplexAdd(rece(0), MinusComplex(rece(2))),
+-                           (state === s5) -> ComplexAdd(rece(2), rece(6)),
+-                           (state === s6) -> ComplexAdd(rece(2), rece(6)),
+-                           (state === s8) -> ComplexAdd(rece(0), MinusComplex(rece(2))),
+-                           (state === s10) -> HalfComplex(ComplexAdd(rece(2), rece(3)))))
+-  send(3) := MuxCase(send(3),
+-                     Array((state === idle0) -> ZeroComplex,
+-                           (state === s1) -> ComplexAdd(rece(2), MinusComplex(rece(6))),
+-                           (state === s3) -> ComplexAdd(rece(1), MinusComplex(rece(3))),
+-                           (state === s5) -> ComplexAdd(rece(3), rece(7)),
+-                           (state === s6) -> ComplexAdd(rece(3), rece(7)),
+-                           (state === s8) -> ComplexAdd(rece(1), MinusComplex(rece(3))),
+-                           (state === s10) -> HalfComplex(ComplexAdd(rece(6), rece(7)))))
+-  send(4) := MuxCase(send(4),
+-                     Array((state === idle0) -> ZeroComplex,
+-                           (state === s1) -> ComplexAdd(rece(1), rece(5)),
+-                           (state === s3) -> ComplexAdd(rece(4), rece(6)),
+-                           (state === s5) -> ComplexAdd(rece(0), MinusComplex(rece(4))),
+-                           (state === s6) -> ComplexAdd(rece(0), MinusComplex(rece(4))),
+-                           (state === s8) -> ComplexAdd(rece(4), rece(6)),
+-                           (state === s10) -> HalfComplex(ComplexAdd(rece(0), MinusComplex(rece(1))))))
+-  send(5) := MuxCase(send(5),
+-                     Array((state === idle0) -> ZeroComplex,
+-                           (state === s1) -> ComplexAdd(rece(1), MinusComplex(rece(5))),
+-                           (state === s3) -> ComplexAdd(rece(5), rece(7)),
+-                           (state === s5) -> ComplexAdd(rece(1), MinusComplex(rece(5))),
+-                           (state === s6) -> ComplexAdd(rece(1), MinusComplex(rece(5))),
+-                           (state === s8) -> ComplexAdd(rece(5), rece(7)),
+-                           (state === s10) -> HalfComplex(ComplexAdd(rece(4), MinusComplex(rece(5))))))
+-  send(6) := MuxCase(send(6),
+-                     Array((state === idle0) -> ZeroComplex,
+-                           (state === s1) -> ComplexAdd(rece(3), rece(7)),
+-                           (state === s3) -> ComplexAdd(rece(4), MinusComplex(rece(6))),
+-                           (state === s5) -> ComplexAdd(rece(2), MinusComplex(rece(6))),
+-                           (state === s6) -> ComplexAdd(rece(2), MinusComplex(rece(6))),
+-                           (state === s8) -> ComplexAdd(rece(4), MinusComplex(rece(6))),
+-                           (state === s10) -> HalfComplex(ComplexAdd(rece(2), MinusComplex(rece(3))))))
+-  send(7) := MuxCase(send(7),
+-                     Array((state === idle0) -> ZeroComplex,
+-                           (state === s1) -> ComplexAdd(rece(3), MinusComplex(rece(7))),
+-                           (state === s3) -> ComplexAdd(rece(5), MinusComplex(rece(7))),
+-                           (state === s5) -> ComplexAdd(rece(3), MinusComplex(rece(7))),
+-                           (state === s6) -> ComplexAdd(rece(3), MinusComplex(rece(7))),
+-                           (state === s8) -> ComplexAdd(rece(5), MinusComplex(rece(7))),
+-                           (state === s10) -> HalfComplex(ComplexAdd(rece(6), MinusComplex(rece(7))))))
+-  rece(0) := MuxCase(rece(0),
+-                     Array((state === idle0) -> ZeroComplex,
+-                           (state === init) -> Receive(0.U, rece(0), io.mem.resp.bits.tag, io.mem.resp.bits.data),
+-                           (state === s2) -> send(0),
+-                           (state === s4) -> send(0),
+-                           (state === s7) -> HalfComplex(send(0)),
+-                           (state === s9) -> HalfComplex(send(0))))
+-  rece(1) := MuxCase(rece(1),
+-                     Array((state === idle0) -> ZeroComplex,
+-                           (state === init) -> Receive(1.U, rece(1), io.mem.resp.bits.tag, io.mem.resp.bits.data),
+-                           (state === s2) -> send(1),
+-                           (state === s4) -> send(1),
+-                           (state === s7) -> HalfComplex(send(1)),
+-                           (state === s9) -> HalfComplex(send(1))))
+-  rece(2) := MuxCase(rece(2),
+-                     Array((state === idle0) -> ZeroComplex,
+-                           (state === init) -> Receive(2.U, rece(2), io.mem.resp.bits.tag, io.mem.resp.bits.data),
+-                           (state === s2) -> send(2),
+-                           (state === s4) -> send(2),
+-                           (state === s7) -> HalfComplex(send(2)),
+-                           (state === s9) -> HalfComplex(send(2))))
+-  rece(3) := MuxCase(rece(3),
+-                     Array((state === idle0) -> ZeroComplex,
+-                           (state === init) -> Receive(3.U, rece(3), io.mem.resp.bits.tag, io.mem.resp.bits.data),
+-                           (state === s2) -> MinusComplex(MulJ(send(3))),
+-                           (state === s4) -> send(3),
+-                           (state === s7) -> HalfComplex(send(3)),
+-                           (state === s9) -> HalfComplex(MulJ(send(3)))))
+-  rece(4) := MuxCase(rece(4),
+-                     Array((state === idle0) -> ZeroComplex,
+-                           (state === init) -> Receive(4.U, rece(4), io.mem.resp.bits.tag, io.mem.resp.bits.data),
+-                           (state === s2) -> send(4),
+-                           (state === s4) -> send(4),
+-                           (state === s7) -> HalfComplex(send(4)),
+-                           (state === s9) -> HalfComplex(send(4))))
+-  rece(5) := MuxCase(rece(5),
+-                     Array((state === idle0) -> ZeroComplex,
+-                           (state === init) -> Receive(5.U, rece(5), io.mem.resp.bits.tag, io.mem.resp.bits.data),
+-                           (state === s2) -> send(5),
+-                           (state === s4) -> DivSquaTwo(MulOneMinusJ(send(5))),
+-                           (state === s7) -> HalfComplex(DivSquaTwo(MulOnePlusJ(send(5)))),
+-                           (state === s9) -> HalfComplex(send(5))))
+-  rece(6) := MuxCase(rece(6),
+-                     Array((state === idle0) -> ZeroComplex,
+-                           (state === init) -> Receive(6.U, rece(6), io.mem.resp.bits.tag, io.mem.resp.bits.data),
+-                           (state === s2) -> send(6),
+-                           (state === s4) -> MinusComplex(MulJ(send(6))),
+-                           (state === s7) -> HalfComplex(MulJ(send(6))),
+-                           (state === s9) -> HalfComplex(send(6))))
+-  rece(7) := MuxCase(rece(7),
+-                     Array((state === idle0) -> ZeroComplex,
+-                           (state === init) -> Receive(7.U, rece(7), io.mem.resp.bits.tag, io.mem.resp.bits.data),
+-                           (state === s2) -> MinusComplex(MulJ(send(7))),
+-                           (state === s4) -> DivSquaTwo(MinusComplex(MulOnePlusJ(send(7)))),
+-                           (state === s7) -> HalfComplex(DivSquaTwo(MinusComplex(MulOneMinusJ(send(7))))),
+-                           (state === s9) -> HalfComplex(MulJ(send(7)))))
+-
+-
+-
+-//control path
+-
+-
+-
+-
+-  RealPriAddr := Mux(con1, io.cmd.bits.rs1, RealPriAddr)
+-  ImagPriAddr := Mux(con1, io.cmd.bits.rs2, ImagPriAddr)
+-
+-  RealRetAddr := Mux(con2, io.cmd.bits.rs1, RealRetAddr)
+-  ImagRetAddr := Mux(con2, io.cmd.bits.rs2, ImagRetAddr)
+-  
+-  funct := Mux(io.cmd.valid, io.cmd.bits.inst.funct(1,0), funct)
+-
+-  switch(state)
+-  {
+-    is(idle0)
+-    {
+-      when(funct === 0.U) { state := idle1 }
+-      .otherwise { state := idle0 }
+-    }
+-    is(idle1)
+-    {
+-      when(funct === 1.U || funct === 2.U) { state := init }
+-      .otherwise { state := idle1 }
+-    }
+-    is(init)
+-    {
+-      when(funct === 1.U && FinishRece) { state := s1 }
+-      .elsewhen(funct === 2.U && FinishRece) { state := s6 }
+-      .otherwise { state := init }
+-    }
+-    is(s1) { state := s2 }
+-    is(s2) { state := s3 }
+-    is(s3) { state := s4 }
+-    is(s4) { state := s5 }
+-    is(s5) { state := re }
+-    is(s6) { state := s7 }
+-    is(s7) { state := s8 }
+-    is(s8) { state := s9 }
+-    is(s9) { state := s10 }
+-    is(s10) { state := re }
+-    is(re)
+-    {
+-      when(FinishSend) { state := idle0 }
+-      .otherwise { state := re }
+-    }
+-  }
+-
+-
+-  InstReady := Mux(con3, true.B, false.B)
+-  io.cmd.ready := InstReady
+-  io.busy := state === init || state === re
+-
+-  xs2 := Mux(io.cmd.bits.inst.funct(1,0) === 0.U, io.cmd.bits.inst.xs2, xs2)
+-  Max := Mux(state === re, 15.U, Mux(xs2, 15.U, 7.U))
+-
+-  switch(ReqState)
+-  {
+-    is(fin)
+-    {
+-      when(state === init || state === re) { ReqState := fin }
+-      .otherwise { ReqState := zero }
+-    }
+-    is(zero)
+-    {
+-      when(state === init && io.mem.req.ready) { ReqState := lreq }
+-      .elsewhen(state === re && io.mem.req.ready) { ReqState := sreq }
+-      .otherwise { ReqState := zero }
+-    }
+-    is(lreq)
+-    {
+-      when(ReqCounter === Max && io.mem.req.ready) { ReqState := fin }
+-      .otherwise { ReqState := lreq }
+-    }
+-    is(sreq)
+-    {
+-      when(ReqCounter === 15.U && io.mem.req.ready) { ReqState := fin }
+-      .otherwise { ReqState := sreq }
+-    }
+-  }
+-
+-  ReqCounter := Mux(ReqState === zero, 0.U, 
+-                Mux(ReqCounter === Max, ReqCounter,
+-                Mux(memreqvalid && io.mem.req.ready, ReqCounter + 1.U, ReqCounter)))
+-
+-  memreqvalid := ReqState === lreq || ReqState === sreq
+-  io.mem.req.valid := memreqvalid
+-
+-  memreqcmd := Mux(state === init, 0.U, Mux(state === re, 1.U, memreqcmd))
+-  io.mem.req.bits.cmd := memreqcmd
+-  io.mem.req.bits.typ := 3.U
+-
+-  LAddr := Mux(!xs2, RealPriAddr + (ReqCounter(2,0) << SBits),
+-           Mux(ReqCounter < 8.U, RealPriAddr + (ReqCounter(2,0) << SBits), ImagPriAddr + (ReqCounter(2,0) << SBits)))
+-  SAddr := Mux(ReqCounter < 8.U, RealRetAddr + (ReqCounter(2,0) << SBits), ImagRetAddr + (ReqCounter(2,0) << SBits))
+-  io.mem.req.bits.addr := Mux(state === init, LAddr, SAddr)
+-  io.mem.req.bits.data := Mux(ReqCounter < 8.U, send(ReqCounter(2,0)).real, send(ReqCounter(2,0)).imag)
+-
+-  io.mem.req.bits.tag := ReqCounter
+-
+-
+-  for(i <- 0 until 16)
+-  {
+-    ReceTagNote(i) := Mux(state =/= init && state =/= re, false.B,
+-    Mux((state === init || state === re) && io.mem.resp.valid && io.mem.resp.bits.tag === i.U, true.B,
+-    ReceTagNote(i)))
+-  }
+-
+-  FinishRece := Mux(con4, true.B, false.B)
+-  FinishSend := Mux(state === re && ReceTagNote.asUInt === "hFFFF".U, true.B, false.B)
+-
+-
+-}
+-
+-
+-
+-

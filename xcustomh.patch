@@ -1,0 +1,29 @@
+diff --git a/src/xcustom.h b/src/xcustom.h
+index 4c3d6fc..0c2beec 100644
+--- a/src/xcustom.h
++++ b/src/xcustom.h
+@@ -29,8 +29,7 @@
+ #define XCUSTOM(x, rd, rs1, rs2, funct)         \
+   XCUSTOM_OPCODE(x)                   |         \
+   (rd                   << (7))       |         \
+-  ((rs2 != 0) & 1       << (7+5))     |         \
+-  (0x1                  << (7+5+1))   |         \
++  (0x3                  << (7+5))     |         \
+   ((rd != 0) & 1        << (7+5+2))   |         \
+   (rs1                  << (7+5+3))   |         \
+   (rs2                  << (7+5+3+5)) |         \
+@@ -66,14 +65,6 @@
+         :: [_rs1] "r" (rs1_), [_rs2] "r" (rs2_));                 \
+   }
+ 
+-//for fftacc
+-#define ROCC_INSTRUCTION_0_R_0(x, rs1, funct, rs1_n)                    \
+-  {                                                                     \
+-    register uint64_t rs1_ asm ("x" # rs1_n) = (uint64_t) rs1;          \
+-    asm volatile (                                                      \
+-        ".word " STR(XCUSTOM(x, 0, rs1_n, 0, funct)) "\n\t"             \
+-        :: [_rs1] "r" (rs1_));                                          \
+-  }
+ // [TODO] fix these to align with the above approach
+ // Macro to pass rs2_ as an immediate
+ /*

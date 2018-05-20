@@ -1,0 +1,83 @@
+diff --git a/include/fftacc.h b/include/fftacc.h
+deleted file mode 100644
+index 86bc49c..0000000
+--- a/include/fftacc.h
++++ /dev/null
+@@ -1,23 +0,0 @@
+-#ifndef SRC_MAIN_C_FFTACC_H
+-#define SRC_MAIN_C_FFTACC_H
+-
+-#include "rocc-software/src/xcustom.h"
+-
+-#define INIT 0
+-#define FFT 1
+-#define IFFT 2
+-
+-
+-#define XCUSTOM_FFTACC 0
+-
+-#define complexinit(prirealaddr, priimagaddr)                                          \
+-  ROCC_INSTRUCTION_0_R_R(XCUSTOM_FFTACC, prirealaddr, priimagaddr, INIT, 10, 11);
+-#define intinit(prirealaddr)                                                           \
+-  ROCC_INSTRUCTION_0_R_0(XCUSTOM_FFTACC, prirealaddr, INIT, 10);
+-#define fft(retrealaddr, retimagaddr)                                                  \
+-  ROCC_INSTRUCTION_0_R_R(XCUSTOM_FFTACC, retrealaddr, retimagaddr, FFT, 10, 11);
+-#define ifft(retrealaddr, retimagaddr)                                                 \
+-  ROCC_INSTRUCTION_0_R_R(XCUSTOM_FFTACC, retrealaddr, retimagaddr, IFFT, 10, 11);
+-
+-
+-#endif
+diff --git a/pk/Makefile b/pk/Makefile
+index f7a9a06..e7ea93e 100644
+--- a/pk/Makefile
++++ b/pk/Makefile
+@@ -1,8 +1,7 @@
+ include $(abs_top_srcdir)/Makefrag
+ 
+ tests = \
+-	accumulator \
+-        fftacc
++	accumulator
+ 
+ CFLAGS := $(CFLAGS) \
+ 	-Wall \
+diff --git a/pk/fftacc.c b/pk/fftacc.c
+deleted file mode 100644
+index 64699d2..0000000
+--- a/pk/fftacc.c
++++ /dev/null
+@@ -1,34 +0,0 @@
+-#include <stdint.h>
+-#include <stdio.h>
+-#include"include/fftacc.h"
+-
+-
+-int main()
+-{
+-  long int prireal[8] = {0,0,0,0, 7,0,0,0};
+-  long int priimag[8] = {12,1,1,1, 1,-8,1,1};
+-  long int retreal[8] = {9,9,9,9, 9,9,9,9};
+-  long int retimag[8] = {9,9,9,9, 9,9,9,9};
+-  int i;
+-
+-  asm volatile("fence");
+-  intinit(prireal);
+-  fft(retreal, retimag);
+-  asm volatile("fence");
+-
+-
+-  for(i=0;i<8;i++)
+-  {
+-    printf("prireal = %ld, priimag = %ld \n", prireal[i], priimag[i]);
+-  }
+-
+-  printf("\n");
+-
+-  for(i=0;i<8;i++)
+-  {
+-    printf("retreal = %ld, retimag = %ld \n", retreal[i], retimag[i]);
+-  }
+-
+-  return 0;
+-
+-}
