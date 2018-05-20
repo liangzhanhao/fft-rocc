@@ -3,6 +3,7 @@
 
 
 The Compatible rocket-chip commit: 18e3bf37012967cfe3f8da8e3e8fa07bbbb52f33
+
 The Compatible rocket-rocc-examples commit: cc86e29b4f7adcc277a5fe6f65fd448a606bbeac
 
 ## Get the rocket-chip commit
@@ -57,26 +58,26 @@ The rocket-rocc-examples repo is an environment for testing example RoCCs in roc
 	$ ./emulator-freechips.rocketchip.system-FFTACCConfig pk $ROCKET_ROCC_EXAMPLES_DIR/build/pk/examples-pk-fftacc
 
 ## Expected result
-$ ./emulator-freechips.rocketchip.system-FFTACCConfig pk /home/liangzh/Desktop/rocket-rocc-examples/build/pk/examples-pk-fftacc 
-This emulator compiled with JTAG Remote Bitbang client. To enable, use +jtag_rbb_enable=1.
-Listening on port 33627
-prireal = 0, priimag = 12 
-prireal = 0, priimag = 1 
-prireal = 0, priimag = 1 
-prireal = 0, priimag = 1 
-prireal = 7, priimag = 1 
-prireal = 0, priimag = -8 
-prireal = 0, priimag = 1 
-prireal = 0, priimag = 1 
+	$ ./emulator-freechips.rocketchip.system-FFTACCConfig pk /home/liangzh/Desktop/rocket-rocc-examples/build/pk/examples-pk-fftacc
+	This emulator compiled with JTAG Remote Bitbang client. To enable, use +jtag_rbb_enable=1.
+	Listening on port 33627
+	prireal = 0, priimag = 12 
+	prireal = 0, priimag = 1 
+	prireal = 0, priimag = 1 
+	prireal = 0, priimag = 1 
+	prireal = 7, priimag = 1 
+	prireal = 0, priimag = -8 
+	prireal = 0, priimag = 1 
+	prireal = 0, priimag = 1 
 
-retreal = 7, retimag = 0 
-retreal = -7, retimag = 0 
-retreal = 7, retimag = 0 
-retreal = -7, retimag = 0 
-retreal = 7, retimag = 0 
-retreal = -7, retimag = 0 
-retreal = 7, retimag = 0 
-retreal = -7, retimag = 0
+	retreal = 7, retimag = 0 
+	retreal = -7, retimag = 0 
+	retreal = 7, retimag = 0 
+	retreal = -7, retimag = 0 
+	retreal = 7, retimag = 0 
+	retreal = -7, retimag = 0 
+	retreal = 7, retimag = 0 
+	retreal = -7, retimag = 0 
 
 
 
