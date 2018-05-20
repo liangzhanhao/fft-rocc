@@ -19,6 +19,7 @@ To switch rocket-chip to commit 18e3bf3:
 The rocket-rocc-examples repo is an environment for testing example RoCCs in rocket-chip. It is recommended to write test programs for your custom RoCC. To get the rocket-rocc-examples repo (As this repo hasn't been update over 3 months, the directly cloned repo is what we want):
 
 	$ git clone https://github.com/seldridge/rocket-rocc-examples.git
+	$ git submodule update --init
 
 ## Patch rocket-chip
 
