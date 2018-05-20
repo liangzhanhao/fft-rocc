@@ -31,7 +31,7 @@ The rocket-rocc-examples repo is an environment for testing example RoCCs in roc
 	$ cd $ROCKET_ROCC_EXAMPLES_DIR
 	$ git apply $THIS_REPO_DIR/rocket-rocc-examples.patch
 	$ cd $ROCKET_ROCC_EXAMPLES_DIR/rocc-software
-	$ git apply $THIS_REPO_DIR/xcustomh.patch
+	$ git apply $THIS_REPO_DIR/xcustom.patch
 
 ## Build the FFT project
 
