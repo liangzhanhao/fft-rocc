@@ -108,13 +108,13 @@ index 0000000..717a37b
 +*/
 +
 +
-+  class ComplexNum extends Bundle 
++  class ComplexNum extends Bundle
 +  {
 +    val real = UInt(xLen.W)
 +    val imag = UInt(xLen.W)
 +  }
 +
-+  def Receive(number: UInt, pri: ComplexNum, tag: UInt, data: UInt): ComplexNum = 
++  def Receive(number: UInt, pri: ComplexNum, tag: UInt, data: UInt): ComplexNum =
 +  {
 +    val C = Wire(new ComplexNum)
 +    C.real := Mux(io.mem.resp.valid && tag === number, data, pri.real)
@@ -361,7 +361,7 @@ index 0000000..717a37b
 +
 +  RealRetAddr := Mux(con2, io.cmd.bits.rs1, RealRetAddr)
 +  ImagRetAddr := Mux(con2, io.cmd.bits.rs2, ImagRetAddr)
-+  
++
 +  funct := Mux(io.cmd.valid, io.cmd.bits.inst.funct(1,0), funct)
 +
 +  switch(state)
@@ -432,7 +432,7 @@ index 0000000..717a37b
 +    }
 +  }
 +
-+  ReqCounter := Mux(ReqState === zero, 0.U, 
++  ReqCounter := Mux(ReqState === zero, 0.U,
 +                Mux(ReqCounter === Max, ReqCounter,
 +                Mux(memreqvalid && io.mem.req.ready, ReqCounter + 1.U, ReqCounter)))
 +
