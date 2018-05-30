@@ -32,17 +32,22 @@ index ab6d6fa..7384dd6 100644
    case BankedL2Key => up(BankedL2Key, site).copy(nBanksPerChannel = n)
  })
 diff --git a/src/main/scala/system/Configs.scala b/src/main/scala/system/Configs.scala
-index 5aab4f1..f8750dc 100644
+index 5aab4f1..e360562 100644
 --- a/src/main/scala/system/Configs.scala
 +++ b/src/main/scala/system/Configs.scala
-@@ -33,6 +33,12 @@ class BaseConfig extends Config(new BaseCoreplexConfig().alter((site,here,up) =>
+@@ -31,8 +31,17 @@ class BaseConfig extends Config(new BaseCoreplexConfig().alter((site,here,up) =>
+   case ExtIn  => SlavePortParams(beatBytes = 8, idBits = 8, sourceBits = 4)
+ }))
  
++
  class DefaultConfig extends Config(new WithNBigCores(1) ++ new BaseConfig)
  
++
 +
 +//FFTACCConfig
 +class FFTACCConfig extends Config(new WithFFTACC ++ new DefaultConfig)
 +//FFTACCConfig
++
 +
 +
  class DefaultBufferlessConfig extends Config(
@@ -50,10 +55,10 @@ index 5aab4f1..f8750dc 100644
  
 diff --git a/src/main/scala/tile/FFTACC.scala b/src/main/scala/tile/FFTACC.scala
 new file mode 100644
-index 0000000..68cbd45
+index 0000000..717a37b
 --- /dev/null
 +++ b/src/main/scala/tile/FFTACC.scala
-@@ -0,0 +1,409 @@
+@@ -0,0 +1,405 @@
 +package freechips.rocketchip.tile
 +
 +import Chisel._
@@ -103,13 +108,13 @@ index 0000000..68cbd45
 +*/
 +
 +
-+  class ComplexNum extends Bundle
++  class ComplexNum extends Bundle 
 +  {
 +    val real = UInt(xLen.W)
 +    val imag = UInt(xLen.W)
 +  }
 +
-+  def Receive(number: UInt, pri: ComplexNum, tag: UInt, data: UInt): ComplexNum =
++  def Receive(number: UInt, pri: ComplexNum, tag: UInt, data: UInt): ComplexNum = 
 +  {
 +    val C = Wire(new ComplexNum)
 +    C.real := Mux(io.mem.resp.valid && tag === number, data, pri.real)
@@ -356,7 +361,7 @@ index 0000000..68cbd45
 +
 +  RealRetAddr := Mux(con2, io.cmd.bits.rs1, RealRetAddr)
 +  ImagRetAddr := Mux(con2, io.cmd.bits.rs2, ImagRetAddr)
-+
++  
 +  funct := Mux(io.cmd.valid, io.cmd.bits.inst.funct(1,0), funct)
 +
 +  switch(state)
@@ -427,7 +432,7 @@ index 0000000..68cbd45
 +    }
 +  }
 +
-+  ReqCounter := Mux(ReqState === zero, 0.U,
++  ReqCounter := Mux(ReqState === zero, 0.U, 
 +                Mux(ReqCounter === Max, ReqCounter,
 +                Mux(memreqvalid && io.mem.req.ready, ReqCounter + 1.U, ReqCounter)))
 +
